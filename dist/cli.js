@@ -38504,6 +38504,11 @@ async function copyTemplateFiles(techStack, template, destination) {
     throw error;
   }
 }
+async function writeScreenUIConfig(destination, techStack, template, version) {
+  const config = { techStack, template, version };
+  const configPath = import_path.default.join(destination, ".screenui.json");
+  await import_fs_extra.default.writeJson(configPath, config, { spaces: 2 });
+}
 async function runSetupCommands(destination) {
   const spinner = (0, import_ora.default)("Setting up dependencies...").start();
   try {
@@ -38529,6 +38534,66 @@ function printSuccessMessage(projectName, techStack) {
     console.log(`Your Vite React app will be available at: ${import_chalk.default.cyan("http://localhost:5173")}`);
   }
   console.log("\n");
+}
+async function readScreenUIConfig(projectDir) {
+  const configPath = import_path.default.join(projectDir, ".screenui.json");
+  if (!import_fs_extra.default.existsSync(configPath)) {
+    return null;
+  }
+  return import_fs_extra.default.readJson(configPath);
+}
+async function updateProject(projectDir) {
+  const spinner = (0, import_ora.default)("Checking for updates...").start();
+  try {
+    const config = await readScreenUIConfig(projectDir);
+    if (!config) {
+      spinner.fail("No .screenui.json found. Cannot determine template.");
+      console.log(import_chalk.default.yellow("Make sure this project was created with create-screenui."));
+      return;
+    }
+    const { techStack, template } = config;
+    const templateDir = import_path.default.join(getTemplatesDir(), techStack, template);
+    if (!import_fs_extra.default.existsSync(templateDir)) {
+      spinner.fail(`Template "${template}" for ${techStack} not found.`);
+      return;
+    }
+    let updatedFiles = [];
+    const files = await import_fs_extra.default.readdir(templateDir);
+    for (const file of files) {
+      if (file !== "template-info.json") {
+        const srcPath = import_path.default.join(templateDir, file);
+        const destPath = import_path.default.join(projectDir, file);
+        let shouldUpdate = true;
+        if (import_fs_extra.default.existsSync(destPath)) {
+          try {
+            const srcContent = await import_fs_extra.default.readFile(srcPath, "utf-8");
+            const destContent = await import_fs_extra.default.readFile(destPath, "utf-8");
+            if (srcContent === destContent) {
+              shouldUpdate = false;
+            }
+          } catch {
+            shouldUpdate = true;
+          }
+        }
+        if (shouldUpdate) {
+          await import_fs_extra.default.copy(srcPath, destPath, { overwrite: true });
+          updatedFiles.push(file);
+        }
+      }
+    }
+    if (updatedFiles.length === 0) {
+      spinner.succeed("Project is already up to date.");
+      return;
+    }
+    spinner.succeed(`Updated ${updatedFiles.length} file(s): ${updatedFiles.join(", ")}`);
+    if (updatedFiles.includes("package.json")) {
+      await runSetupCommands(projectDir);
+    }
+    console.log(import_chalk.default.green("\n\u2705 Update complete!"));
+  } catch (error) {
+    spinner.fail("Update failed");
+    console.error(error);
+  }
 }
 async function run() {
   const cli = cac("create-screenui");
@@ -38590,6 +38655,7 @@ async function run() {
       const projectDir = import_path.default.join(process.cwd(), projectName);
       await import_fs_extra.default.ensureDir(projectDir);
       await copyTemplateFiles(techStack, template, projectDir);
+      await writeScreenUIConfig(projectDir, techStack, template, "0.1.0");
       const { installDeps } = await import_inquirer.default.prompt([
         {
           type: "confirm",
@@ -38607,16 +38673,17 @@ async function run() {
       process.exit(1);
     }
   });
+  cli.command("update", "Update the current ScreenUI project").action(async () => {
+    const projectDir = process.cwd();
+    await updateProject(projectDir);
+  });
   cli.help();
   try {
     let packageJson;
     const packagePaths = [
       import_path.default.join(__dirname, "..", "package.json"),
-      // When running from dist
       import_path.default.join(__dirname, "package.json"),
-      // Alternative location
       import_path.default.join(process.cwd(), "package.json")
-      // When running from project root
     ];
     for (const packagePath of packagePaths) {
       if (import_fs_extra.default.existsSync(packagePath)) {

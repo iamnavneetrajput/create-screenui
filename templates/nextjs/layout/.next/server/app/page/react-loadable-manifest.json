@@ -1,0 +1,10 @@
+{
+  "[project]/src/components/layout/setting.tsx [app-client] (ecmascript, next/dynamic entry)": {
+    "id": "[project]/src/components/layout/setting.tsx [app-client] (ecmascript, next/dynamic entry)",
+    "files": [
+      "static/chunks/node_modules_3711ff53._.js",
+      "static/chunks/src_9893aed8._.js",
+      "static/chunks/src_components_layout_setting_tsx_18f82749._.js"
+    ]
+  }
+}
